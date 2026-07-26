@@ -63,13 +63,13 @@ pub const Env = struct {
 
     pub fn load(allocator: std.mem.Allocator, default_name: []const u8) !Env {
         return .{
-            .bus_port = envU16(allocator, "BUS_PORT", 0),
+            .bus_port = envU16("BUS_PORT", 0),
             .peers = try envList(allocator, "BUS_PEERS"),
             .subscribes = try envList(allocator, "BUS_SUBSCRIBES"),
-            .node_name = std.process.getEnvVarOwned(allocator, "NODE_NAME") catch |err| switch (err) {
-                error.EnvironmentVariableNotFound => try allocator.dupe(u8, default_name),
-                else => return err,
-            },
+            .node_name = if (getEnvVal("NODE_NAME")) |v|
+                try allocator.dupe(u8, v)
+            else
+                try allocator.dupe(u8, default_name),
         };
     }
 };
@@ -177,18 +177,24 @@ pub fn boot(comptime NodeT: type, allocator: std.mem.Allocator) !*NodeHandle(Nod
     return handle;
 }
 
-fn envU16(allocator: std.mem.Allocator, key: []const u8, default: u16) u16 {
-    const v = std.process.getEnvVarOwned(allocator, key) catch return default;
-    defer allocator.free(v);
+// Wraps std.c.getenv (Zig 0.16+: std.process.getEnvVarOwned was removed).
+// Returns a slice into the process environment — valid for the process lifetime.
+fn getEnvVal(key: []const u8) ?[]const u8 {
+    var buf: [256:0]u8 = undefined;
+    if (key.len >= buf.len) return null;
+    @memcpy(buf[0..key.len], key);
+    buf[key.len] = 0;
+    const raw = std.c.getenv(&buf) orelse return null;
+    return std.mem.span(raw);
+}
+
+fn envU16(key: []const u8, default: u16) u16 {
+    const v = getEnvVal(key) orelse return default;
     return std.fmt.parseInt(u16, v, 10) catch default;
 }
 
 pub fn envList(allocator: std.mem.Allocator, key: []const u8) ![][]const u8 {
-    const raw = std.process.getEnvVarOwned(allocator, key) catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => return allocator.alloc([]const u8, 0),
-        else => return err,
-    };
-    defer allocator.free(raw);
+    const raw = getEnvVal(key) orelse return allocator.alloc([]const u8, 0);
 
     var list = std.ArrayList([]const u8).init(allocator);
     var it = std.mem.splitScalar(u8, raw, ',');
