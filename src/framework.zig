@@ -2,7 +2,14 @@ const std = @import("std");
 const bus_mod = @import("zeromq_bus.zig");
 pub const Bus = bus_mod.Bus;
 
-pub const HEARTBEAT_INTERVAL_MS: i64 = 5000;
+// std.time functions were removed in Zig 0.16; use the C library instead.
+const c_time = @cImport(@cInclude("time.h"));
+
+pub const HEARTBEAT_INTERVAL_S: i64 = 5;
+
+fn nowSecs() i64 {
+    return @intCast(c_time.time(null));
+}
 
 /// Compile-time contract check. A missing method is a build error, not a runtime panic.
 fn assertContract(comptime NodeT: type) void {
@@ -69,7 +76,7 @@ pub fn NodeHandle(comptime NodeT: type) type {
         bus: *Bus,
         node: *NodeT,
         name: []const u8,
-        last_hb: i64,
+        last_hb: i64, // seconds since epoch
 
         /// Publish `payload` serialised as JSON on `topic`.
         pub fn broadcast(self: *Self, topic: []const u8, payload: anytype) void {
@@ -83,16 +90,16 @@ pub fn NodeHandle(comptime NodeT: type) type {
         }
 
         /// Drives the event loop forever: sends a heartbeat every
-        /// HEARTBEAT_INTERVAL_MS milliseconds and polls the ZMQ bus for
+        /// HEARTBEAT_INTERVAL_S seconds and polls the ZMQ bus for
         /// incoming messages in between.  Never returns.
         pub fn run(self: *Self) noreturn {
             while (true) {
-                const now = std.time.milliTimestamp();
-                if (now - self.last_hb >= HEARTBEAT_INTERVAL_MS) {
+                const now = nowSecs();
+                if (now - self.last_hb >= HEARTBEAT_INTERVAL_S) {
                     self.bus.publish("heartbeat", .{
                         .node_name = self.name,
                         .status = "ok",
-                        .timestamp = std.time.timestamp(),
+                        .timestamp = now,
                     }) catch |err| {
                         std.debug.print("[Framework Error] Heartbeat failed for {s}: {}\n", .{ self.name, err });
                     };
@@ -121,7 +128,7 @@ pub fn boot(comptime NodeT: type, allocator: std.mem.Allocator) !*NodeHandle(Nod
         .bus = bus,
         .node = node_ptr,
         .name = env.node_name,
-        .last_hb = std.time.milliTimestamp(),
+        .last_hb = nowSecs(),
     };
 
     try subscribeAll(NodeT, bus, node_ptr, env.subscribes);
