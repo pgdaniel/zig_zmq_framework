@@ -196,14 +196,14 @@ fn envU16(key: []const u8, default: u16) u16 {
 pub fn envList(allocator: std.mem.Allocator, key: []const u8) ![][]const u8 {
     const raw = getEnvVal(key) orelse return allocator.alloc([]const u8, 0);
 
-    var list = std.ArrayList([]const u8).init(allocator);
+    var list: std.ArrayList([]const u8) = .empty;
     var it = std.mem.splitScalar(u8, raw, ',');
     while (it.next()) |part| {
         const trimmed = std.mem.trim(u8, part, " \t");
         if (trimmed.len == 0) continue;
-        try list.append(try allocator.dupe(u8, trimmed));
+        try list.append(allocator, try allocator.dupe(u8, trimmed));
     }
-    return list.toOwnedSlice();
+    return list.toOwnedSlice(allocator);
 }
 
 fn handleTermSignal(sig: i32) callconv(.c) void {
@@ -236,12 +236,13 @@ test "envList splits, trims, and drops empties" {
     // getEnvVarOwned reads the real process environment, so exercise the
     // parsing logic directly instead of mutating process env from a test.
     const raw = " a, b ,,c";
-    var list = std.ArrayList([]const u8).init(arena.allocator());
+    var list: std.ArrayList([]const u8) = .empty;
+    const alloc = arena.allocator();
     var it = std.mem.splitScalar(u8, raw, ',');
     while (it.next()) |part| {
         const trimmed = std.mem.trim(u8, part, " \t");
         if (trimmed.len == 0) continue;
-        try list.append(trimmed);
+        try list.append(alloc, trimmed);
     }
     try std.testing.expectEqual(@as(usize, 3), list.items.len);
     try std.testing.expectEqualStrings("a", list.items[0]);
