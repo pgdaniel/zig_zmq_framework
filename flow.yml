@@ -1,0 +1,42 @@
+# The graph as data — the only file that knows the whole topology.
+# Nodes are blackbox processes; wires are topics. Build then run:
+#   zig build && zig-out/bin/flowctl
+#
+# Each node declares the command that runs it and the topics it touches.
+# The launcher assigns ports, computes every node's peer list from who
+# publishes what it subscribes to, and injects the wiring as environment
+# variables (see PROTOCOL.md). Nodes never see this file.
+
+nodes:
+  ecu:
+    cmd: zig-out/bin/ecu
+    publishes: [engine_data]
+    subscribes: [throttle_request]
+
+  telemetry:
+    cmd: zig-out/bin/telemetry
+    publishes: [throttle_request]
+    subscribes: [engine_data]
+
+  webapp:
+    cmd: zig-out/bin/webapp
+    publishes: [throttle_request]
+    subscribes: [engine_data]
+    env: { WEB_PORT: "4567" }
+
+  state_registry:
+    cmd: zig-out/bin/state_registry
+    publishes: [global_state_snapshot]
+    subscribes: [heartbeat, engine_data, can_frame, request_global_state]
+
+  dashboard:
+    cmd: zig-out/bin/dashboard
+    publishes: [request_global_state]
+    subscribes: [global_state_snapshot]
+
+  # Needs a real or virtual CAN interface on the machine; uncomment to
+  # enable. (Until then flowctl warns that nothing publishes can_frame.)
+  # can_bridge:
+  #   cmd: zig-out/bin/can_bridge
+  #   publishes: [can_frame]
+  #   env: { CAN_IFACE: vcan0 }
