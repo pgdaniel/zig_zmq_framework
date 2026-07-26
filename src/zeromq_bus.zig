@@ -81,9 +81,9 @@ pub const Bus = struct {
     /// [topic, json], and dispatches it locally so same-process nodes are notified.
     pub fn publish(self: *Bus, topic: []const u8, payload: anytype) !void {
         var json_buf: [4096]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&json_buf);
-        try std.json.stringify(payload, .{}, fbs.writer());
-        const json_bytes = fbs.getWritten();
+        var writer: std.Io.Writer = std.Io.Writer.fixed(&json_buf);
+        try std.json.Stringify.value(payload, .{}, &writer);
+        const json_bytes = json_buf[0..writer.end];
 
         if (c.zmq_send(self.pub_sock, topic.ptr, topic.len, c.ZMQ_SNDMORE) == -1)
             return BusError.ZmqError;
