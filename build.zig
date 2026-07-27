@@ -9,7 +9,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    framework_mod.linkSystemLibrary("zmq", .{});
+    // Prefer the DLL import library over the static archive to avoid pulling
+    // in GCC's C++ runtime (libstdc++) into the linker command.
+    framework_mod.linkSystemLibrary("zmq", .{ .prefer_static = false });
     framework_mod.link_libc = true;
 
     // Tests live as `test {}` blocks inside the library source files.
