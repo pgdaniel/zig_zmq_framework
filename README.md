@@ -21,7 +21,7 @@ exception — the Zig-native equivalent of the Ruby version's `StrictContract`.
 
 ## Quick start
 
-You need Zig 0.14+ and the ZeroMQ library (`libzmq3-dev` on Debian/Ubuntu,
+You need Zig 0.16+ and the ZeroMQ library (`libzmq3-dev` on Debian/Ubuntu,
 `brew install zeromq` on macOS), then:
 
 ```bash
@@ -37,6 +37,31 @@ is streamed with a `[node_name]` prefix; Ctrl-C stops everything.
 
 `zig-out/bin/flowctl --plan` prints the computed wiring without running
 anything. `zig-out/bin/flowctl --graph` prints the node topology as JSON.
+
+### Windows
+
+**At build time** you need an MSVC-compatible ZMQ import library (`zmq.lib`).
+The MSYS2/ucrt64 package (`pacman -S mingw-w64-ucrt-x86_64-zeromq`) ships only
+a GCC-built static archive (`libzmq.a`) that Zig's `lld-link` cannot use.
+The easiest sources of a linker-compatible build are:
+
+- **vcpkg** — `vcpkg install zeromq:x64-windows` then point `-Dzmq-prefix` at
+  the vcpkg installed tree (e.g. `C:/vcpkg/installed/x64-windows`).
+- **Official Windows release** — grab the pre-built MSVC package from the
+  [libzmq releases page](https://github.com/zeromq/libzmq/releases); it
+  includes `lib/zmq.lib` and `bin/libzmq.dll`.
+
+**At runtime** every ZMQ node — regardless of language — needs `libzmq.dll`
+on `PATH` or in the same directory as the executable.  When using the MSYS2
+install the DLL lives at:
+
+```
+C:\Ruby34-x64\msys64\ucrt64\bin\libzmq.dll
+```
+
+Add that directory to `PATH` or copy the DLL next to your node binary before
+running.  Nodes written in Ruby, Python, Go, etc. all load the same DLL; only
+one copy is needed.
 
 ## Writing a node
 
