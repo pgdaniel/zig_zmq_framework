@@ -42,26 +42,48 @@ anything. `zig-out/bin/flowctl --graph` prints the node topology as JSON.
 
 **At build time** you need an MSVC-compatible ZMQ import library (`zmq.lib`).
 The MSYS2/ucrt64 package (`pacman -S mingw-w64-ucrt-x86_64-zeromq`) ships only
-a GCC-built static archive (`libzmq.a`) that Zig's `lld-link` cannot use.
-The easiest sources of a linker-compatible build are:
+a GCC-built static archive (`libzmq.a`) that Zig's `lld-link` cannot use — and
+even its `libzmq.dll.a` import lib is a dead end: it sits in the same
+directory as `libzmq.a`, and Zig's linker resolves `-lzmq` by scanning library
+paths for a matching filename, always preferring the static `.a` if one is
+present anywhere on the path (`preferred_link_mode` on `linkSystemLibrary`
+only affects Darwin's `ld64` search flags — it's silently a no-op on Windows).
+So the ucrt64 `lib/` directory must never appear on the library search path at
+all, static and dynamic alike.
 
-- **vcpkg** — `vcpkg install zeromq:x64-windows` then point `-Dzmq-prefix` at
+The easiest sources of a working import library:
+
+- **vcpkg** — `vcpkg install zeromq:x64-windows`, then point `-Dzmq-prefix` at
   the vcpkg installed tree (e.g. `C:/vcpkg/installed/x64-windows`).
 - **Official Windows release** — grab the pre-built MSVC package from the
   [libzmq releases page](https://github.com/zeromq/libzmq/releases); it
   includes `lib/zmq.lib` and `bin/libzmq.dll`.
 
-**At runtime** every ZMQ node — regardless of language — needs `libzmq.dll`
-on `PATH` or in the same directory as the executable.  When using the MSYS2
-install the DLL lives at:
+**Gotcha:** vcpkg's `zeromq` port does not name its output `zmq.lib` — it's
+versioned, e.g. `lib/libzmq-mt-4_3_5.lib` and `bin/libzmq-mt-4_3_5.dll` (check
+the exact version under `installed/x64-windows/lib`). `linkSystemLibrary("zmq")`
+only looks for `zmq.lib`/`libzmq.lib`, so it won't find the vcpkg file as-is.
+Consumers need to stage a renamed copy on the library search path — e.g. in
+the consuming `build.zig`:
 
-```
-C:\Ruby34-x64\msys64\ucrt64\bin\libzmq.dll
+```zig
+const zmq_lib_wf = b.addWriteFiles();
+_ = zmq_lib_wf.addCopyFile(
+    .{ .cwd_relative = zmq_prefix ++ "/lib/libzmq-mt-4_3_5.lib" },
+    "zmq.lib",
+);
+exe_mod.addLibraryPath(zmq_lib_wf.getDirectory());
 ```
 
-Add that directory to `PATH` or copy the DLL next to your node binary before
-running.  Nodes written in Ruby, Python, Go, etc. all load the same DLL; only
-one copy is needed.
+(The official Windows release doesn't need this — its lib is already named
+`zmq.lib`.)
+
+**At runtime** every ZMQ node — regardless of language — needs the ZMQ DLL on
+`PATH` or in the same directory as the executable (`libzmq-mt-4_3_5.dll` for
+vcpkg, `libzmq.dll` for the MSYS2/ucrt64 or official-release builds). Add that
+directory to `PATH`, or have your `build.zig` copy the DLL into `zig-out/bin`
+alongside the exe. Nodes written in Ruby, Python, Go, etc. all load the same
+DLL; only one copy is needed on the machine.
 
 ## Writing a node
 
