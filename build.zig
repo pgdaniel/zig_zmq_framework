@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
     });
     // Prefer the DLL import library over the static archive to avoid pulling
     // in GCC's C++ runtime (libstdc++) into the linker command.
-    framework_mod.linkSystemLibrary("zmq", .{ .prefer_static = false });
+    framework_mod.linkSystemLibrary("zmq", .{ .preferred_link_mode = .dynamic });
     framework_mod.link_libc = true;
 
     // Tests live as `test {}` blocks inside the library source files.
